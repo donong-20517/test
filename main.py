@@ -11,12 +11,16 @@ import plotly.graph_objects as go
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import (
+    r2_score,
+    mean_absolute_error,
+    mean_squared_error
+)
 
 
-# =====================================================
+# ==================================================
 # 1. 기본 설정
-# =====================================================
+# ==================================================
 
 st.set_page_config(
     page_title="지하수 전기전도도 예측기",
@@ -26,7 +30,7 @@ st.set_page_config(
 
 DATA_URL = (
     "https://www.data.go.kr/cmm/cmm/fileDownload.do"
-    "?atchFileId=FILE_000000003114451"
+    "?atchFileId=FILE_000000003096493"
     "&fileDetailSn=1"
     "&insertDataPrcus=N"
 )
@@ -40,7 +44,9 @@ html, body, [class*="css"] {
 }
 
 .stApp {
-    background: linear-gradient(180deg, #effaff 0%, #f7fffc 48%, #fffaf0 100%);
+    background: linear-gradient(
+        180deg, #effaff 0%, #f7fffc 55%, #fffaf0 100%
+    );
 }
 
 .block-container {
@@ -59,11 +65,11 @@ p, label, li {
 }
 
 [data-testid="stMetric"] {
-    background: rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.9);
     border: 1px solid #d9edf0;
     border-radius: 20px;
     padding: 20px;
-    box-shadow: 0 5px 18px rgba(115, 175, 190, 0.10);
+    box-shadow: 0 5px 18px rgba(115,175,190,0.10);
 }
 
 [data-testid="stMetricLabel"] {
@@ -72,10 +78,6 @@ p, label, li {
 
 [data-testid="stMetricValue"] {
     color: #43899a;
-}
-
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    border-radius: 20px;
 }
 
 .stTabs [data-baseweb="tab"] {
@@ -118,14 +120,14 @@ hr {
 
 .mascot-title {
     font-family: 'Jua', sans-serif;
-    font-size: 23px;
+    font-size: 25px;
     color: #508b9b;
 }
 
 .mascot-text {
     color: #6b8e98;
     font-size: 15px;
-    line-height: 1.8;
+    line-height: 1.9;
 }
 
 .section-note {
@@ -141,9 +143,9 @@ hr {
 """, unsafe_allow_html=True)
 
 
-# =====================================================
-# 2. 제목 및 소개
-# =====================================================
+# ==================================================
+# 2. 제목
+# ==================================================
 
 st.markdown("""
 <div class="mascot">
@@ -151,74 +153,66 @@ st.markdown("""
     <div class="mascot-title">지하수 전기전도도 예측기</div>
     <div class="mascot-text">
         물속에 녹아 있는 다양한 수질 성분을 살펴보고,<br>
-        여러 성분이 전기전도도와 어떤 관계를 가지는지 분석해 봅니다.<br>
-        데이터를 바탕으로 전기전도도를 예측하는 회귀 모델도 만들어 봅니다.
+        여러 성분이 전기전도도와 어떤 관계를 가지는지 분석합니다.<br>
+        실제 측정 자료를 바탕으로 전기전도도를 예측해 봅니다.
     </div>
-    <div style="text-align:right; font-size:25px;">🫧 💧</div>
+    <div style="text-align:right;font-size:25px;">🫧 💧</div>
 </div>
 """, unsafe_allow_html=True)
 
 
-# =====================================================
-# 3. 실제 데이터 항목 이름과 의미
-# =====================================================
-
-MEANINGS = {
-    "측정소": "지하수 수질을 측정한 장소",
-    "구분": "측정 지점의 구분 정보",
-    "채수일": "지하수 시료를 채취한 날짜",
-    "ph": "물의 산성 또는 알칼리성 정도",
-    "염소이온": "물에 녹아 있는 염소 이온의 농도",
-    "질산성질소": "물에 포함된 질산성 질소의 농도",
-    "시안": "물에 포함된 시안 성분의 농도",
-    "비소": "물에 포함된 비소의 농도",
-    "카드뮴": "물에 포함된 카드뮴의 농도",
-    "수은": "물에 포함된 수은의 농도",
-    "납": "물에 포함된 납의 농도",
-    "크롬": "물에 포함된 크롬의 농도",
-    "총대장균군": "물에 포함된 총대장균군의 수",
-    "페놀": "물에 포함된 페놀의 농도",
-    "벤젠": "물에 포함된 벤젠의 농도",
-    "톨루엔": "물에 포함된 톨루엔의 농도",
-    "에틸벤젠": "물에 포함된 에틸벤젠의 농도",
-    "크실렌": "물에 포함된 크실렌의 농도",
-    "111트리클로로에탄": "물에 포함된 1,1,1-트리클로로에탄의 농도",
-    "테트라클로로에틸렌": "물에 포함된 테트라클로로에틸렌의 농도",
-    "트리클로로에틸렌": "물에 포함된 트리클로로에틸렌의 농도",
-    "다이아지논": "물에 포함된 다이아지논의 농도",
-    "파라티온": "물에 포함된 파라티온의 농도",
-    "전기전도도": "물속에 녹아 있는 이온에 의해 전기가 통하는 정도"
-}
+# ==================================================
+# 3. 항목 이름 및 의미
+# ==================================================
 
 ALIASES = {
-    "pH": ["ph", "수소이온농도"],
-    "염소이온": ["염소이온"],
-    "질산성질소": ["질산성질소"],
-    "전기전도도": ["전기전도도"],
+    "전기전도도": [
+        "전기전도도", "전기전도", "EC", "electricalconductivity"
+    ],
+    "pH": [
+        "수소이온농도", "pH"
+    ],
+    "염소이온": [
+        "염소이온", "염화이온", "chloride"
+    ],
+    "질산성질소": [
+        "질산성질소", "nitrate"
+    ],
+    "총대장균군": ["총대장균군"],
     "시안": ["시안"],
     "비소": ["비소"],
     "카드뮴": ["카드뮴"],
     "수은": ["수은"],
     "납": ["납"],
     "크롬": ["크롬"],
-    "총대장균군": ["총대장균군"],
     "페놀": ["페놀"],
     "벤젠": ["벤젠"],
     "톨루엔": ["톨루엔"],
     "에틸벤젠": ["에틸벤젠"],
     "크실렌": ["크실렌"],
-    "1,1,1-트리클로로에탄": ["111트리클로로에탄"],
-    "테트라클로로에틸렌": ["테트라클로로에틸렌"],
-    "트리클로로에틸렌": ["트리클로로에틸렌"],
     "다이아지논": ["다이아지논"],
     "파라티온": ["파라티온"]
 }
 
-DISPLAY_NAMES = {
-    "pH": "pH",
-    "염소이온": "염소이온",
-    "질산성질소": "질산성질소",
-    "전기전도도": "전기전도도"
+MEANINGS = {
+    "전기전도도": "물속에 녹아 있는 이온에 의해 전기가 통하는 정도",
+    "pH": "물의 산성 또는 알칼리성 정도",
+    "염소이온": "물에 녹아 있는 염소 이온의 농도",
+    "질산성질소": "물에 포함된 질산성 질소의 농도",
+    "총대장균군": "물에 포함된 총대장균군의 수",
+    "시안": "물에 포함된 시안 성분의 농도",
+    "비소": "물에 포함된 비소의 농도",
+    "카드뮴": "물에 포함된 카드뮴의 농도",
+    "수은": "물에 포함된 수은의 농도",
+    "납": "물에 포함된 납의 농도",
+    "크롬": "물에 포함된 크롬의 농도",
+    "페놀": "물에 포함된 페놀의 농도",
+    "벤젠": "물에 포함된 벤젠의 농도",
+    "톨루엔": "물에 포함된 톨루엔의 농도",
+    "에틸벤젠": "물에 포함된 에틸벤젠의 농도",
+    "크실렌": "물에 포함된 크실렌의 농도",
+    "다이아지논": "물에 포함된 다이아지논의 농도",
+    "파라티온": "물에 포함된 파라티온의 농도"
 }
 
 
@@ -231,31 +225,48 @@ def normalize_name(name):
 
 
 def find_column(columns, aliases):
-    for column in columns:
-        normalized = normalize_name(column)
+    normalized_columns = [
+        (column, normalize_name(column))
+        for column in columns
+    ]
 
-        for alias in aliases:
-            target = normalize_name(alias)
+    for alias in aliases:
+        target = normalize_name(alias)
 
-            if normalized == target or normalized.startswith(target):
+        for column, normalized in normalized_columns:
+            if normalized == target:
+                return column
+
+    for alias in aliases:
+        target = normalize_name(alias)
+
+        if len(target) < 2:
+            continue
+
+        for column, normalized in normalized_columns:
+            if normalized.startswith(target):
                 return column
 
     return None
 
 
-def get_meaning(column):
+def get_meaning(column, display_name=None):
+    if display_name in MEANINGS:
+        return MEANINGS[display_name]
+
     normalized = normalize_name(column)
 
-    for key, meaning in MEANINGS.items():
-        if normalize_name(key) in normalized:
-            return meaning
+    for name, aliases in ALIASES.items():
+        for alias in aliases:
+            if normalize_name(alias) in normalized:
+                return MEANINGS.get(name, "항목 설명 확인 필요")
 
-    return "공식 데이터의 항목명 확인 필요"
+    return "공식 데이터의 항목 설명 확인 필요"
 
 
-# =====================================================
+# ==================================================
 # 4. 결측값 및 불검출 처리
-# =====================================================
+# ==================================================
 
 MISSING_VALUES = {
     "", "nan", "na", "n/a", "null",
@@ -270,7 +281,7 @@ def is_missing(value):
 def is_non_detect(value):
     value = str(value).strip().lower()
 
-    if any(x in value for x in [
+    if any(word in value for word in [
         "불검출", "검출한계미만", "정량한계미만"
     ]):
         return True
@@ -300,13 +311,18 @@ def numeric_series(series):
     return result
 
 
-# =====================================================
+# ==================================================
 # 5. 데이터 불러오기
-# =====================================================
+# ==================================================
 
 @st.cache_data(ttl=3600)
 def load_data():
-    response = requests.get(DATA_URL, timeout=60)
+    response = requests.get(
+        DATA_URL,
+        timeout=90,
+        headers={"User-Agent": "Mozilla/5.0"}
+    )
+
     response.raise_for_status()
 
     content = response.content
@@ -315,13 +331,21 @@ def load_data():
         raise ValueError("다운로드한 파일이 비어 있습니다.")
 
     if content.lstrip().startswith(b"<"):
-        raise ValueError("CSV 대신 웹페이지가 반환되었습니다.")
+        raise ValueError(
+            "CSV 대신 웹페이지가 반환되었습니다. "
+            "데이터 다운로드 응답을 확인해 주세요."
+        )
 
     errors = []
 
-    for encoding in ["utf-8-sig", "cp949", "euc-kr", "utf-8"]:
+    for encoding in [
+        "utf-8-sig",
+        "cp949",
+        "euc-kr",
+        "utf-8"
+    ]:
         try:
-            df = pd.read_csv(
+            data = pd.read_csv(
                 BytesIO(content),
                 encoding=encoding,
                 dtype=str,
@@ -329,82 +353,116 @@ def load_data():
                 sep=None,
                 engine="python"
             )
+
             break
-        except Exception as e:
-            errors.append(str(e))
+
+        except Exception as error:
+            errors.append(str(error))
+
     else:
-        raise ValueError("\n".join(errors))
+        raise ValueError(
+            "CSV 파일을 읽지 못했습니다.\n"
+            + "\n".join(errors)
+        )
 
-    df.columns = [str(c).strip() for c in df.columns]
+    data.columns = [
+        str(column).strip()
+        for column in data.columns
+    ]
 
-    df = df.dropna(how="all")
+    data = data.dropna(how="all")
 
-    for column in df.columns:
-        df[column] = df[column].astype(str).str.strip()
+    for column in data.columns:
+        data[column] = (
+            data[column].astype(str).str.strip()
+        )
 
-    return df
+    return data
 
 
 try:
-    with st.spinner("맑은 지하수 데이터를 불러오고 있어요..."):
+    with st.spinner("지하수 데이터를 불러오고 있어요..."):
         df = load_data()
 
-except Exception as e:
+except Exception as error:
     st.error("데이터를 불러오지 못했습니다.")
-    st.exception(e)
+    st.exception(error)
     st.stop()
 
 
 if df.empty:
-    st.warning("데이터가 없습니다.")
+    st.warning("불러온 데이터가 없습니다.")
     st.stop()
 
 
-# =====================================================
-# 6. 실제 데이터 열 확인
-# =====================================================
+# ==================================================
+# 6. 실제 열 이름 자동 확인
+# ==================================================
 
 COLUMN_MAP = {}
 
-for name, aliases in ALIASES.items():
+for display_name, aliases in ALIASES.items():
     found = find_column(df.columns, aliases)
 
     if found is not None:
-        COLUMN_MAP[name] = found
+        COLUMN_MAP[display_name] = found
 
 
 ec_column = COLUMN_MAP.get("전기전도도")
 
+# 전기전도도 열을 찾지 못했을 때 실제 열 이름 표시
 if ec_column is None:
+
     st.error(
-        "실제 데이터에서 전기전도도 열을 찾지 못했습니다. "
-        "아래 실제 열 이름을 확인해 주세요."
+        "전기전도도 열을 자동으로 찾지 못했습니다."
     )
+
+    st.write("현재 CSV의 실제 열 이름:")
+
     st.write(list(df.columns))
+
+    st.info(
+        "전기전도도에 해당하는 실제 열 이름을 확인한 후 "
+        "열 이름 연결을 수정해야 합니다."
+    )
+
     st.stop()
 
 
-# 수질 성분 열 중 실제로 존재하는 열만 사용
+# ==================================================
+# 7. 수치형 데이터 생성
+# ==================================================
+
+numeric_data = pd.DataFrame(index=df.index)
+
+for column in df.columns:
+
+    converted = numeric_series(df[column])
+
+    if converted.notna().sum() > 0:
+        numeric_data[column] = converted
+
+
+# 실제로 수치형 자료가 있는 항목만 사용
 analyte_columns = []
 
 for name, column in COLUMN_MAP.items():
-    if name != "전기전도도":
+
+    if name == "전기전도도":
+        continue
+
+    if column in numeric_data.columns:
         analyte_columns.append(column)
 
 
-# 각 수질 성분의 수치형 데이터 생성
-numeric_data = pd.DataFrame(index=df.index)
-
-for column in analyte_columns + [ec_column]:
-    numeric_data[column] = numeric_series(df[column])
-
-
-# =====================================================
-# 7. 결측값 및 불검출 정보
-# =====================================================
+# ==================================================
+# 8. 결측값 및 불검출 개수
+# ==================================================
 
 def get_missing_count(column):
-    return int(df[column].apply(is_missing).sum())
+    return int(
+        df[column].apply(is_missing).sum()
+    )
 
 
 def get_non_detect_count(column):
@@ -417,12 +475,14 @@ def get_non_detect_count(column):
 
 
 def get_numeric_count(column):
-    return int(numeric_data[column].notna().sum())
+    return int(
+        numeric_data[column].notna().sum()
+    )
 
 
-# =====================================================
-# 8. 상단 메뉴
-# =====================================================
+# ==================================================
+# 9. 메뉴
+# ==================================================
 
 tabs = st.tabs([
     "💧 데이터 개요",
@@ -434,52 +494,55 @@ tabs = st.tabs([
 ])
 
 
-# =====================================================
+# ==================================================
 # TAB 1. 데이터 개요
-# =====================================================
+# ==================================================
 
 with tabs[0]:
 
     st.header("💧 지하수 데이터 개요")
 
     st.write(
-        "국가지하수 관리측정망의 수질 자료를 바탕으로 "
-        "전체 데이터의 구조와 항목을 확인합니다."
+        "국가지하수관리측정망 자료의 전체 구조와 "
+        "수질 항목을 확인합니다."
     )
 
-    col1, col2, col3, col4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
 
-    with col1:
-        st.metric("전체 측정 자료", f"{len(df):,}개")
-
-    with col2:
-        st.metric("전체 항목 수", f"{len(df.columns):,}개")
-
-    with col3:
-        st.metric(
-            "전기전도도 측정값",
-            f"{get_numeric_count(ec_column):,}개"
-        )
-
-    with col4:
-        st.metric(
-            "전기전도도 결측값",
-            f"{get_missing_count(ec_column):,}개"
-        )
+    c1.metric("전체 측정 자료", f"{len(df):,}개")
+    c2.metric("전체 항목 수", f"{len(df.columns):,}개")
+    c3.metric(
+        "전기전도도 측정값",
+        f"{get_numeric_count(ec_column):,}개"
+    )
+    c4.metric(
+        "전기전도도 결측값",
+        f"{get_missing_count(ec_column):,}개"
+    )
 
     st.markdown("### 🐚 데이터 항목과 의미")
 
     information = []
 
     for column in df.columns:
+
+        display_name = None
+
+        for name, actual in COLUMN_MAP.items():
+            if actual == column:
+                display_name = name
+                break
+
+        if column in numeric_data.columns:
+            value_type = "수치형"
+        else:
+            value_type = "문자형 또는 날짜형"
+
         information.append({
-            "실제 데이터 열 이름": column,
-            "항목의 의미": get_meaning(column),
-            "값의 유형": (
-                "수치형"
-                if column in numeric_data.columns
-                else "문자형 또는 날짜형"
-            ),
+            "실제 열 이름": column,
+            "항목 이름": display_name or column,
+            "항목의 의미": get_meaning(column, display_name),
+            "값의 유형": value_type,
             "결측값": get_missing_count(column),
             "불검출값": get_non_detect_count(column)
         })
@@ -498,122 +561,125 @@ with tabs[0]:
         hide_index=True
     )
 
-    st.caption(
-        "출처: 한국수자원공사 국가지하수 관리측정망 수질정보"
-    )
 
-
-# =====================================================
+# ==================================================
 # TAB 2. 데이터 탐색
-# =====================================================
+# ==================================================
 
 with tabs[1]:
 
     st.header("🔎 수질 항목별 데이터 탐색")
 
     st.write(
-        "각 수질 항목의 값이 어떤 범위에 분포하는지 "
-        "히스토그램을 통해 살펴봅니다."
+        "히스토그램으로 각 수질 항목의 값이 "
+        "어떤 범위에 분포하는지 살펴봅니다."
     )
 
-    histogram_columns = [
-        ec_column
-    ] + analyte_columns
+    histogram_columns = list(numeric_data.columns)
 
-    histogram_columns = list(dict.fromkeys(histogram_columns))
+    preferred_columns = [
+        COLUMN_MAP.get(name)
+        for name in [
+            "전기전도도",
+            "pH",
+            "염소이온",
+            "질산성질소"
+        ]
+    ]
 
-    default_hist = []
-
-    for preferred in ["pH", "염소이온", "질산성질소", "전기전도도"]:
-        actual = COLUMN_MAP.get(preferred)
-
-        if actual in histogram_columns:
-            default_hist.append(actual)
+    default_hist = [
+        column for column in preferred_columns
+        if column in histogram_columns
+    ]
 
     selected_hist = st.multiselect(
-        "히스토그램을 확인할 수질 항목을 선택하세요.",
-        options=histogram_columns,
+        "히스토그램을 확인할 항목을 선택하세요.",
+        histogram_columns,
         default=default_hist
     )
 
-    if selected_hist:
+    for i in range(0, len(selected_hist), 2):
 
-        for i in range(0, len(selected_hist), 2):
+        cols = st.columns(2)
 
-            cols = st.columns(2)
+        for j, col in enumerate(cols):
 
-            for j, col in enumerate(cols):
+            if i + j >= len(selected_hist):
+                continue
 
-                if i + j >= len(selected_hist):
+            column = selected_hist[i + j]
+            values = numeric_data[column].dropna()
+
+            with col:
+
+                st.markdown(f"#### 🫧 {column}")
+
+                if len(values) == 0:
+                    st.warning("분석할 자료가 없습니다.")
                     continue
 
-                column = selected_hist[i + j]
+                fig = px.histogram(
+                    x=values,
+                    nbins=30,
+                    labels={
+                        "x": column,
+                        "count": "자료 수"
+                    },
+                    color_discrete_sequence=["#8ccfce"]
+                )
 
-                values = numeric_data[column].dropna()
+                fig.update_layout(
+                    height=310,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="#ffffff",
+                    margin=dict(l=20, r=20, t=20, b=30),
+                    showlegend=False
+                )
 
-                with col:
+                fig.update_traces(
+                    marker_line_color="#ffffff",
+                    marker_line_width=1
+                )
 
-                    st.markdown(f"#### 🫧 {column}")
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
 
-                    if len(values) == 0:
-                        st.warning("분석 가능한 수치형 자료가 없습니다.")
-                        continue
+                st.markdown("**이 그래프로 알 수 있는 것**")
 
-                    fig = px.histogram(
-                        x=values,
-                        nbins=30,
-                        labels={"x": column, "count": "자료 수"},
-                        color_discrete_sequence=["#8ccfce"]
-                    )
+                if len(values) >= 2:
 
-                    fig.update_layout(
-                        height=300,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="#ffffff",
-                        margin=dict(l=20, r=20, t=20, b=30),
-                        showlegend=False
-                    )
+                    mean_value = values.mean()
+                    median_value = values.median()
 
-                    fig.update_traces(
-                        marker_line_color="#ffffff",
-                        marker_line_width=1
-                    )
+                    if mean_value > median_value * 1.2:
+                        explanation = (
+                            "평균이 중앙값보다 높아 큰 측정값들이 "
+                            "분포의 오른쪽에 영향을 주고 있을 가능성이 있습니다."
+                        )
 
-                    st.plotly_chart(
-                        fig,
-                        use_container_width=True
-                    )
+                    elif mean_value < median_value * 0.8:
+                        explanation = (
+                            "평균이 중앙값보다 낮아 작은 측정값들이 "
+                            "분포의 왼쪽에 영향을 주고 있을 가능성이 있습니다."
+                        )
 
-                    st.markdown("**이 그래프로 알 수 있는 것**")
-
-                    if len(values) > 1:
-                        mean_value = values.mean()
-                        median_value = values.median()
-
-                        if mean_value > median_value * 1.2:
-                            explanation = (
-                                "평균이 중앙값보다 높아 큰 측정값이 "
-                                "분포의 오른쪽에 영향을 주고 있을 가능성이 있습니다."
-                            )
-                        elif mean_value < median_value * 0.8:
-                            explanation = (
-                                "평균이 중앙값보다 낮아 작은 측정값이 "
-                                "분포의 왼쪽에 영향을 주고 있을 가능성이 있습니다."
-                            )
-                        else:
-                            explanation = (
-                                "평균과 중앙값이 비교적 가까워 "
-                                "분포의 중심이 크게 치우치지 않은 모습을 보입니다."
-                            )
                     else:
-                        explanation = "측정 자료가 충분하지 않아 분포 특징을 판단하기 어렵습니다."
+                        explanation = (
+                            "평균과 중앙값이 비교적 가까운 값을 보여 "
+                            "분포의 중심이 크게 치우치지 않은 모습입니다."
+                        )
 
-                    st.markdown(
-                        f'<div class="section-note">{explanation}</div>',
-                        unsafe_allow_html=True
-                    )
+                else:
+                    explanation = "분포를 판단하기에 자료가 부족합니다."
 
-    else:
+                st.markdown(
+                    f'<div class="section-note">{explanation}</div>',
+                    unsafe_allow_html=True
+                )
+
+    if not selected_hist:
         st.info("확인할 항목을 선택해 주세요.")
 
     st.divider()
@@ -649,14 +715,13 @@ with tabs[1]:
     )
 
     st.caption(
-        "평균, 최솟값, 최댓값은 수치로 변환할 수 있는 측정값만 사용합니다. "
         "불검출값은 0으로 바꾸지 않고 통계 계산에서 제외합니다."
     )
 
 
-# =====================================================
+# ==================================================
 # TAB 3. 상관관계 분석
-# =====================================================
+# ==================================================
 
 with tabs[2]:
 
@@ -664,23 +729,24 @@ with tabs[2]:
 
     st.write(
         "각 수질 성분의 값이 변할 때 전기전도도가 "
-        "어떤 경향을 보이는지 살펴봅니다."
+        "어떤 경향을 보이는지 확인합니다."
     )
 
     relationship_columns = [
-        column
-        for column in analyte_columns
+        column for column in analyte_columns
         if numeric_data[column].notna().sum() >= 3
     ]
 
     if relationship_columns:
 
+        default_relationship = COLUMN_MAP.get("pH")
+
         selected_relationship = st.selectbox(
-            "분석할 수질 항목을 선택하세요.",
+            "분석할 수질 항목",
             relationship_columns,
             index=(
-                relationship_columns.index(COLUMN_MAP["pH"])
-                if COLUMN_MAP.get("pH") in relationship_columns
+                relationship_columns.index(default_relationship)
+                if default_relationship in relationship_columns
                 else 0
             )
         )
@@ -722,15 +788,17 @@ with tabs[2]:
                         y=y_line,
                         mode="lines",
                         name="선형 추세선",
-                        line=dict(color="#e8a7a3", width=3)
+                        line=dict(
+                            color="#e8a7a3",
+                            width=3
+                        )
                     )
                 )
 
             fig.update_layout(
                 height=430,
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#ffffff",
-                margin=dict(l=20, r=20, t=30, b=30)
+                plot_bgcolor="#ffffff"
             )
 
             st.plotly_chart(
@@ -738,44 +806,46 @@ with tabs[2]:
                 use_container_width=True
             )
 
-            col1, col2 = st.columns(2)
+            c1, c2 = st.columns(2)
 
-            with col1:
-                st.metric(
-                    "상관계수",
-                    f"{correlation:.4f}"
-                )
+            c1.metric(
+                "상관계수",
+                f"{correlation:.4f}"
+            )
 
-            with col2:
-                st.metric(
-                    "분석에 사용된 자료",
-                    f"{len(pair):,}개"
-                )
+            c2.metric(
+                "분석 자료 수",
+                f"{len(pair):,}개"
+            )
 
             st.markdown("**이 그래프로 알 수 있는 것**")
 
             if correlation >= 0.7:
                 explanation = (
-                    "두 항목 사이에 비교적 강한 양의 선형 상관관계가 나타나며, "
-                    "수질 항목의 값이 커질수록 전기전도도도 커지는 경향을 보입니다."
+                    "비교적 강한 양의 선형 상관관계가 나타나며, "
+                    "수질 항목의 값이 커질수록 전기전도도도 커지는 경향이 있습니다."
                 )
+
             elif correlation >= 0.3:
                 explanation = (
-                    "두 항목 사이에 어느 정도 양의 상관관계가 나타나며, "
-                    "수질 항목의 값이 커질수록 전기전도도가 증가하는 경향이 있습니다."
+                    "어느 정도 양의 상관관계가 나타나며, "
+                    "두 항목이 같은 방향으로 변하는 경향이 있습니다."
                 )
+
             elif correlation > -0.3:
                 explanation = (
                     "두 항목 사이에 뚜렷한 선형 상관관계가 나타나지 않습니다."
                 )
+
             elif correlation > -0.7:
                 explanation = (
-                    "두 항목 사이에 어느 정도 음의 상관관계가 나타나며, "
-                    "수질 항목의 값이 커질수록 전기전도도가 감소하는 경향이 있습니다."
+                    "어느 정도 음의 상관관계가 나타나며, "
+                    "두 항목이 반대 방향으로 변하는 경향이 있습니다."
                 )
+
             else:
                 explanation = (
-                    "두 항목 사이에 비교적 강한 음의 선형 상관관계가 나타납니다."
+                    "비교적 강한 음의 선형 상관관계가 나타납니다."
                 )
 
             st.markdown(
@@ -784,14 +854,14 @@ with tabs[2]:
             )
 
         else:
-            st.warning("두 항목을 함께 측정한 자료가 부족합니다.")
+            st.warning("함께 측정된 자료가 부족합니다.")
 
     else:
-        st.warning("분석 가능한 수질 항목이 없습니다.")
+        st.warning("분석할 수질 항목이 없습니다.")
 
     st.divider()
 
-    st.subheader("📋 수질 항목별 상관계수 비교")
+    st.subheader("📋 수질 항목별 상관계수")
 
     correlation_results = []
 
@@ -817,8 +887,8 @@ with tabs[2]:
 
     corr_df = corr_df.sort_values(
         "상관계수",
-        ascending=False,
         key=lambda x: x.abs(),
+        ascending=False,
         na_position="last"
     )
 
@@ -832,75 +902,61 @@ with tabs[2]:
 
     st.info(
         "상관계수의 절댓값이 1에 가까울수록 선형 관계가 강하고, "
-        "0에 가까울수록 선형 관계가 약합니다. "
-        "양수는 같은 방향, 음수는 반대 방향의 관계를 의미합니다. "
-        "상관관계만으로 원인과 결과를 단정할 수는 없습니다."
+        "0에 가까울수록 약합니다. 양수는 같은 방향, 음수는 반대 방향의 "
+        "관계를 의미합니다. 상관관계만으로 원인과 결과를 단정할 수 없습니다."
     )
 
 
-# =====================================================
+# ==================================================
 # TAB 4. 전기전도도 예측
-# =====================================================
+# ==================================================
 
 with tabs[3]:
 
     st.header("📈 다중 선형회귀 전기전도도 예측")
 
     st.write(
-        "사용자가 선택한 수질 항목을 독립 변수로 설정하고 "
-        "전기전도도를 예측하는 회귀 모델을 학습합니다."
+        "선택한 수질 항목을 독립 변수로, "
+        "전기전도도를 종속 변수로 설정합니다."
     )
 
     st.markdown("### 🫧 독립 변수 선택")
 
-    default_features = []
-
-    for preferred in ["pH", "염소이온", "질산성질소"]:
-        actual = COLUMN_MAP.get(preferred)
-
-        if actual in analyte_columns:
-            default_features.append(actual)
+    default_features = [
+        COLUMN_MAP[name]
+        for name in ["pH", "염소이온", "질산성질소"]
+        if name in COLUMN_MAP
+        and COLUMN_MAP[name] in analyte_columns
+    ]
 
     selected_features = st.multiselect(
-        "예측에 사용할 수질 항목을 선택하세요.",
-        options=analyte_columns,
+        "예측에 사용할 수질 항목",
+        analyte_columns,
         default=default_features
-    )
-
-    st.markdown(
-        '<div class="section-note">'
-        '선택한 수질 항목은 독립 변수(X), 전기전도도는 종속 변수(y)로 사용합니다.'
-        '</div>',
-        unsafe_allow_html=True
     )
 
     test_size = st.slider(
         "테스트 데이터 비율",
-        min_value=0.1,
-        max_value=0.4,
-        value=0.2,
-        step=0.05
+        0.1, 0.4, 0.2, 0.05
     )
 
-    if len(selected_features) == 0:
+    if not selected_features:
 
         st.warning("독립 변수를 하나 이상 선택해 주세요.")
 
     else:
 
-        # 목표값이 실제 수치로 확인되는 자료만 사용
-        model_df = pd.DataFrame(index=df.index)
+        model_df = numeric_data[
+            selected_features + [ec_column]
+        ].copy()
 
-        for feature in selected_features:
-            model_df[feature] = numeric_data[feature]
-
-        model_df["전기전도도"] = numeric_data[ec_column]
-
-        model_df = model_df.dropna(subset=["전기전도도"])
+        model_df = model_df.dropna(
+            subset=[ec_column]
+        )
 
         if len(model_df) < 10:
 
-            st.warning("모델을 학습하기 위한 자료가 부족합니다.")
+            st.warning("학습에 필요한 자료가 부족합니다.")
 
         else:
 
@@ -910,36 +966,30 @@ with tabs[3]:
                 random_state=42
             )
 
-            X_train_all = model_df.iloc[train_idx][selected_features]
-            X_test_all = model_df.iloc[test_idx][selected_features]
+            X_train = model_df.iloc[train_idx][selected_features].copy()
+            X_test = model_df.iloc[test_idx][selected_features].copy()
 
-            y_train = model_df.iloc[train_idx]["전기전도도"]
-            y_test = model_df.iloc[test_idx]["전기전도도"]
+            y_train = model_df.iloc[train_idx][ec_column]
+            y_test = model_df.iloc[test_idx][ec_column]
 
-            # 학습 데이터에서 계산한 중앙값만 사용
-            usable_features = []
+            # 학습 데이터의 중앙값으로만 결측값 처리
+            medians = X_train.median()
 
-            for feature in selected_features:
-                median_value = X_train_all[feature].median()
+            usable_features = [
+                feature for feature in selected_features
+                if pd.notna(medians[feature])
+            ]
 
-                if pd.isna(median_value):
-                    st.warning(
-                        f"{feature}: 학습 데이터에 수치형 자료가 없어 "
-                        "이번 모델에서 제외합니다."
-                    )
-                else:
-                    usable_features.append(feature)
+            if not usable_features:
 
-            if len(usable_features) == 0:
-
-                st.error("학습할 수 있는 독립 변수가 없습니다.")
+                st.error("사용 가능한 독립 변수가 없습니다.")
 
             else:
 
-                X_train = X_train_all[usable_features].copy()
-                X_test = X_test_all[usable_features].copy()
+                X_train = X_train[usable_features].copy()
+                X_test = X_test[usable_features].copy()
 
-                medians = X_train.median()
+                medians = medians[usable_features]
 
                 X_train = X_train.fillna(medians)
                 X_test = X_test.fillna(medians)
@@ -956,16 +1006,11 @@ with tabs[3]:
 
                 st.markdown("### ✨ 모델 학습 결과")
 
-                col1, col2, col3 = st.columns(3)
+                c1, c2, c3 = st.columns(3)
 
-                with col1:
-                    st.metric("결정계수 R²", f"{r2:.4f}")
-
-                with col2:
-                    st.metric("평균 절대 오차 MAE", f"{mae:.4f}")
-
-                with col3:
-                    st.metric("평균 제곱 오차 MSE", f"{mse:.4f}")
+                c1.metric("결정계수 R²", f"{r2:.4f}")
+                c2.metric("평균 절대 오차 MAE", f"{mae:.4f}")
+                c3.metric("평균 제곱 오차 MSE", f"{mse:.4f}")
 
                 st.markdown("### 🧪 회귀식 계수")
 
@@ -986,22 +1031,22 @@ with tabs[3]:
                     f"절편: **{model.intercept_:.6f}**"
                 )
 
-                st.markdown("### 📊 예측 결과")
+                st.caption(
+                    f"전체 {len(model_df):,}개 자료 중 "
+                    f"학습 {len(train_idx):,}개, "
+                    f"테스트 {len(test_idx):,}개"
+                )
 
                 result_df = pd.DataFrame({
                     "실제 전기전도도": y_test.to_numpy(),
                     "예측 전기전도도": predictions
                 })
 
+                st.markdown("### 📋 테스트 자료 예측 결과")
+
                 st.dataframe(
                     result_df.head(20).style.format("{:.4f}"),
                     use_container_width=True
-                )
-
-                st.caption(
-                    f"전체 {len(model_df):,}개 자료 중 "
-                    f"학습 {len(train_idx):,}개, "
-                    f"테스트 {len(test_idx):,}개를 사용했습니다."
                 )
 
                 st.session_state["model_result"] = {
@@ -1016,57 +1061,46 @@ with tabs[3]:
                     "metrics": (r2, mae, mse)
                 }
 
-                st.success(
-                    "모델 학습과 테스트 데이터 예측이 완료되었습니다."
-                )
+                st.success("모델 학습과 예측이 완료되었습니다.")
 
 
-# =====================================================
+# ==================================================
 # TAB 5. 모델 성능 비교
-# =====================================================
+# ==================================================
 
 with tabs[4]:
 
     st.header("📊 여러 변수 조합의 예측 성능 비교")
 
     st.write(
-        "각 수질 항목을 단독으로 사용한 모델과 "
+        "각 항목을 단독으로 사용한 모델과 "
         "여러 항목을 함께 사용한 모델을 비교합니다."
     )
 
-    st.info(
-        "모든 모델은 동일한 데이터 분할을 사용하며, "
-        "각 모델의 결측값 대체 기준은 학습 데이터에서만 계산합니다."
-    )
-
-    comparison_features = []
-
-    for preferred in ["pH", "염소이온", "질산성질소"]:
-
-        actual = COLUMN_MAP.get(preferred)
-
-        if actual is not None and actual in analyte_columns:
-            comparison_features.append(actual)
+    comparison_features = [
+        COLUMN_MAP[name]
+        for name in ["pH", "염소이온", "질산성질소"]
+        if name in COLUMN_MAP
+        and COLUMN_MAP[name] in analyte_columns
+    ]
 
     if not comparison_features:
-        st.warning("기본 비교 항목이 실제 데이터에서 발견되지 않았습니다.")
+
+        st.warning("비교할 기본 수질 항목이 없습니다.")
 
     else:
 
-        comparison_df = pd.DataFrame({
-            column: numeric_data[column]
-            for column in comparison_features
-        })
-
-        comparison_df["전기전도도"] = numeric_data[ec_column]
+        comparison_df = numeric_data[
+            comparison_features + [ec_column]
+        ].copy()
 
         comparison_df = comparison_df.dropna(
-            subset=["전기전도도"]
+            subset=[ec_column]
         )
 
         if len(comparison_df) < 10:
 
-            st.warning("모델 비교를 위한 자료가 부족합니다.")
+            st.warning("모델 비교에 필요한 자료가 부족합니다.")
 
         else:
 
@@ -1076,25 +1110,25 @@ with tabs[4]:
                 random_state=42
             )
 
-            y_train = comparison_df.iloc[train_idx]["전기전도도"]
-            y_test = comparison_df.iloc[test_idx]["전기전도도"]
+            y_train = comparison_df.iloc[train_idx][ec_column]
+            y_test = comparison_df.iloc[test_idx][ec_column]
 
-            comparison_models = []
+            model_combinations = []
 
             for feature in comparison_features:
-                comparison_models.append({
+                model_combinations.append({
                     "이름": f"{feature} 단독 모델",
                     "변수": [feature]
                 })
 
-            comparison_models.append({
+            model_combinations.append({
                 "이름": "여러 항목 통합 모델",
                 "변수": comparison_features
             })
 
             results = []
 
-            for item in comparison_models:
+            for item in model_combinations:
 
                 features = item["변수"]
 
@@ -1104,9 +1138,8 @@ with tabs[4]:
                 medians = X_train.median()
 
                 usable = [
-                    column
-                    for column in features
-                    if pd.notna(medians[column])
+                    feature for feature in features
+                    if pd.notna(medians[feature])
                 ]
 
                 if not usable:
@@ -1188,7 +1221,10 @@ with tabs[4]:
                     y="오차",
                     color="평가 지표",
                     barmode="group",
-                    color_discrete_sequence=["#e9b6aa", "#a8cde1"]
+                    color_discrete_sequence=[
+                        "#e9b6aa",
+                        "#a8cde1"
+                    ]
                 )
 
                 fig.update_layout(
@@ -1231,14 +1267,13 @@ with tabs[4]:
                 )
 
                 st.caption(
-                    "R²는 1에 가까울수록 좋고, MAE와 MSE는 작을수록 좋습니다. "
-                    "모델의 성능은 동일한 테스트 자료에서 비교해야 합니다."
+                    "R²는 높을수록 좋고, MAE와 MSE는 낮을수록 좋습니다."
                 )
 
 
-# =====================================================
+# ==================================================
 # TAB 6. 예측 결과 분석
-# =====================================================
+# ==================================================
 
 with tabs[5]:
 
@@ -1247,7 +1282,7 @@ with tabs[5]:
     if "model_result" not in st.session_state:
 
         st.info(
-            "먼저 '전기전도도 예측' 메뉴에서 모델을 학습해 주세요."
+            "먼저 전기전도도 예측 메뉴에서 모델을 학습해 주세요."
         )
 
     else:
@@ -1258,7 +1293,9 @@ with tabs[5]:
         predicted = result["predictions"]
 
         prediction_df = pd.DataFrame({
-            "자료 번호": result["model_df"].index[result["test_idx"]] + 1,
+            "자료 번호": (
+                result["model_df"].index[result["test_idx"]] + 1
+            ),
             "실제 전기전도도": actual,
             "예측 전기전도도": predicted
         })
@@ -1325,7 +1362,7 @@ with tabs[5]:
         st.markdown(
             '<div class="section-note">'
             '점들이 기준선에 가까울수록 실제 전기전도도와 '
-            '모델의 예측값이 비슷하다는 의미입니다. '
+            '예측값이 비슷하다는 의미입니다. '
             '기준선에서 멀리 떨어진 점은 예측 오차가 큰 자료입니다.'
             '</div>',
             unsafe_allow_html=True
@@ -1357,35 +1394,30 @@ with tabs[5]:
 
         st.divider()
 
-        st.markdown("### 🔎 예측이 잘 맞지 않는 이유 살펴보기")
+        st.markdown("### 🔎 예측 오차의 원인 살펴보기")
 
         st.write(
-            "오차가 큰 자료의 특징을 살펴보고, "
-            "데이터의 상태가 예측 결과와 관련이 있을 가능성을 확인합니다."
+            "예측 오차가 큰 자료의 특징을 살펴보고 "
+            "데이터의 상태와 변수의 분포를 확인합니다."
         )
 
         st.markdown("#### ① 입력 변수의 결측값과 불검출")
 
-        features = result["features"]
-        model_df = result["model_df"]
-
         original_test = df.loc[
-            model_df.index[result["test_idx"]]
+            result["model_df"].index[result["test_idx"]]
         ]
 
         quality_rows = []
 
-        for feature in features:
-
-            original_column = feature
+        for feature in result["features"]:
 
             missing_count = original_test[
-                original_column
+                feature
             ].apply(is_missing).sum()
 
             nd_count = (
-                original_test[original_column].apply(is_non_detect)
-                & ~original_test[original_column].apply(is_missing)
+                original_test[feature].apply(is_non_detect)
+                & ~original_test[feature].apply(is_missing)
             ).sum()
 
             quality_rows.append({
@@ -1402,12 +1434,15 @@ with tabs[5]:
 
         st.markdown("#### ② 변수별 값의 분포")
 
-        for feature in features:
+        for feature in result["features"]:
 
             fig = px.histogram(
-                x=model_df[feature].dropna(),
+                x=result["model_df"][feature].dropna(),
                 nbins=25,
-                labels={"x": feature, "count": "자료 수"},
+                labels={
+                    "x": feature,
+                    "count": "자료 수"
+                },
                 color_discrete_sequence=["#a8d8c8"]
             )
 
@@ -1423,14 +1458,14 @@ with tabs[5]:
                 use_container_width=True
             )
 
-        st.markdown("#### ③ 오차 분석 시 유의할 점")
+        st.markdown("#### ③ 예측 오차 해석 시 유의 사항")
 
         st.markdown("""
-        - 일부 입력 변수에 결측값이나 불검출값이 많으면 실제 측정값 대신 학습 자료의 중앙값으로 대체한 자료가 많아질 수 있습니다.
-        - 수질 항목의 분포가 한쪽으로 치우쳐 있으면 일부 큰 값에서 예측 오차가 커질 수 있습니다.
-        - 선택한 변수만으로 전기전도도에 영향을 주는 여러 요인을 충분히 설명하지 못할 가능성도 있습니다.
-        - 측정 지점이나 측정 시기에 따른 차이가 예측에 영향을 주었을 가능성도 검토할 수 있습니다.
-        - 이러한 특징만으로 특정 원인이 예측 오차를 발생시켰다고 단정할 수는 없습니다.
+        - 결측값이나 불검출값이 많으면 실제 측정값 대신 학습 자료의 중앙값으로 대체된 자료가 많아질 수 있습니다.
+        - 일부 수질 항목의 값이 특정 범위에 집중되거나 큰 값이 드물게 나타나면 예측 오차에 영향을 줄 수 있습니다.
+        - 선택한 변수만으로 전기전도도와 관련된 모든 특성을 설명하지 못할 가능성이 있습니다.
+        - 측정 지점이나 측정 시기에 따른 차이도 검토할 필요가 있습니다.
+        - 위 특징들은 오차와 관련될 가능성을 보여 줄 뿐, 특정 원인이 오차를 발생시켰다고 확정할 수는 없습니다.
         """)
 
         st.divider()
@@ -1443,21 +1478,25 @@ with tabs[5]:
         )
 
         st.download_button(
-            label="예측 결과 CSV 다운로드",
+            "예측 결과 CSV 다운로드",
             data=csv,
             file_name="groundwater_prediction.csv",
             mime="text/csv"
         )
 
 
-# =====================================================
+# ==================================================
 # 10. 하단 안내
-# =====================================================
+# ==================================================
 
 st.divider()
 
 st.markdown("""
-<div style="text-align:center; padding:20px; color:#83aab0;">
+<div style="
+    text-align:center;
+    padding:20px;
+    color:#83aab0;
+">
     💧 지하수 전기전도도 예측기 🫧<br>
     <span style="font-size:13px;">
         실제 측정 자료를 바탕으로 살펴보는 지하수 수질 분석
