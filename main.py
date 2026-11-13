@@ -1,7 +1,8 @@
 import re
 from io import BytesIO
 from urllib.request import Request, urlopen
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
+from html import unescape
 
 import numpy as np
 import pandas as pd
@@ -255,118 +256,187 @@ def numeric_series(series):
 
 
 # ==================================================
-# 6. URL에서 CSV 불러오기
+# 6. CSV 데이터 불러오기
 # ==================================================
 
-@st.cache_data(show_spinner=False)
-def load_data(data_url):
-    data_url = data_url.strip()
-    parsed = urlparse(data_url)
 
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError("http:// 또는 https://로 시작하는 올바른 URL을 입력해 주세요.")
-
-    # 이 주소는 CSV 원본이 아니라 공공데이터포털의 상세 설명 페이지임
-    if parsed.netloc.endswith("data.go.kr") and "/fileData.do" in parsed.path:
-        raise ValueError(
-            "이 주소는 데이터 상세 페이지입니다. 페이지에서 CSV를 내려받을 수 있는 "
-            "실제 다운로드 URL을 확인해 입력해 주세요. 상세 페이지 주소만으로는 "
-            "앱이 CSV 원본을 직접 읽을 수 없습니다."
-        )
-
-    request = Request(data_url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request, timeout=30) as response:
-        content = response.read()
-
+def parse_csv_bytes(content, source_name="데이터"):
     if not content:
-        raise ValueError("다운로드한 데이터가 비어 있습니다.")
-
+        raise ValueError(f"{source_name}에서 내려받은 데이터가 비어 있습니다.")
     if content.lstrip().startswith((b"<", b"{")):
-        raise ValueError(
-            "CSV 원본이 아닌 웹페이지 또는 JSON 응답을 받았습니다. "
-            "CSV 파일을 직접 내려받는 URL인지 확인해 주세요."
-        )
+        raise ValueError(f"{source_name}에서 CSV 파일이 아니라 웹페이지 또는 JSON 응답을 받았습니다.")
 
     errors = []
     data = None
-
     for encoding in ["utf-8-sig", "cp949", "euc-kr", "utf-8"]:
         try:
             data = pd.read_csv(
-                BytesIO(content),
-                encoding=encoding,
-                dtype=str,
-                keep_default_na=False,
-                sep=None,
-                engine="python"
+                BytesIO(content), encoding=encoding, dtype=str,
+                keep_default_na=False, sep=None, engine="python"
             )
             break
         except Exception as error:
             errors.append(str(error))
 
     if data is None:
-        raise ValueError("CSV 파일을 읽지 못했습니다.\n" + "\n".join(errors[-2:]))
+        raise ValueError("CSV 파일을 읽지 못했습니다. " + " / ".join(errors[-2:]))
 
     data.columns = [str(column).strip() for column in data.columns]
     data = data.dropna(how="all")
-
     for column in data.columns:
         data[column] = data[column].astype(str).str.strip()
-
     if data.empty:
         raise ValueError("데이터에 분석할 행이 없습니다.")
-
     return data
 
 
+def fetch_bytes(url, referer=None):
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; GroundwaterPHApp/1.0)"}
+    if referer:
+        headers["Referer"] = referer
+    request = Request(url, headers=headers)
+    with urlopen(request, timeout=45) as response:
+        return response.read(), response.geturl(), response.headers.get("Content-Type", "")
+
+
+def extract_portal_download_candidates(page_html, page_url):
+    """공공데이터포털 상세 페이지 HTML에서 파일 다운로드 링크를 추출한다."""
+    html = unescape(page_html)
+    candidates = []
+    patterns = [
+        r"(?:href|data-url)\s*=\s*[\"']([^\"']*(?:FileDown|fileDownload|downloadFile)[^\"']*)[\"']",
+        r"(?:location\.href|window\.open)\s*\(?\s*[\"']([^\"']*(?:FileDown|fileDownload|downloadFile)[^\"']*)[\"']",
+        r"[\"']([^\"']*(?:FileDown|fileDownload|downloadFile)\.do[^\"']*)[\"']"
+    ]
+    for pattern in patterns:
+        for match in re.findall(pattern, html, flags=re.IGNORECASE):
+            candidate = match.replace("&amp;", "&").replace("\\/", "/")
+            if not candidate.lower().startswith("javascript:"):
+                candidates.append(urljoin(page_url, candidate))
+
+    # onclick="fn_fileDown('파일ID', '파일순번')" 형태도 확인
+    onclick_matches = re.findall(
+        r"fn_fileDown\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]?([A-Za-z0-9_-]+)['\"]?",
+        html,
+        flags=re.IGNORECASE
+    )
+    for first_arg, second_arg in onclick_matches:
+        # 첫 번째 값이 첨부파일 ID인 포털 구현과 순번인 구현을 모두 후보로 만든다.
+        candidates.extend([
+            urljoin(page_url, f"/cmm/fms/FileDown.do?atchFileId={first_arg}&fileSn={second_arg}"),
+            urljoin(page_url, f"/cmm/fms/FileDown.do?atchFileId={second_arg}&fileSn={first_arg}"),
+            urljoin(page_url, f"/cmm/cmm/fileDownload.do?atchFileId={first_arg}&fileDetailSn={second_arg}")
+        ])
+
+    id_match = re.search(r"(?:atchFileId|atch_file_id)[\"'\s:=]+([A-Za-z0-9_-]{8,})", html, re.IGNORECASE)
+    seq_match = re.search(r"(?:fileSn|fileDetailSn|fileSeq)[\"'\s:=]+([0-9]+)", html, re.IGNORECASE)
+    if id_match:
+        file_id = id_match.group(1)
+        file_seq = seq_match.group(1) if seq_match else "0"
+        candidates.extend([
+            urljoin(page_url, f"/cmm/fms/FileDown.do?atchFileId={file_id}&fileSn={file_seq}"),
+            urljoin(page_url, f"/cmm/cmm/fileDownload.do?atchFileId={file_id}&fileDetailSn={file_seq}")
+        ])
+
+    unique = []
+    for candidate in candidates:
+        if candidate not in unique and urlparse(candidate).netloc:
+            unique.append(candidate)
+    return unique
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_data(data_url):
+    data_url = data_url.strip()
+    parsed = urlparse(data_url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("http:// 또는 https://로 시작하는 올바른 URL을 입력해 주세요.")
+
+    if parsed.netloc.endswith("data.go.kr") and "/fileData.do" in parsed.path:
+        page_bytes, final_page_url, _ = fetch_bytes(data_url)
+        page_html = page_bytes.decode("utf-8", errors="ignore")
+        candidates = extract_portal_download_candidates(page_html, final_page_url)
+        last_error = None
+        for candidate in candidates:
+            try:
+                content, final_url, _ = fetch_bytes(candidate, referer=final_page_url)
+                if content.lstrip().startswith((b"<", b"{")):
+                    continue
+                return parse_csv_bytes(content, "공공데이터포털 파일")
+            except Exception as error:
+                last_error = error
+        detail = f" 마지막 오류: {last_error}" if last_error else ""
+        raise ValueError(
+            "공공데이터포털 상세 페이지에서 실제 CSV 다운로드 주소를 자동으로 찾지 못했습니다. "
+            "포털의 다운로드 방식이 별도 인증을 요구할 수 있습니다. "
+            "CSV 파일 자체의 직접 다운로드 주소를 입력해 주세요." + detail
+        )
+
+    content, final_url, _ = fetch_bytes(data_url)
+    return parse_csv_bytes(content, final_url)
+
+
 # ==================================================
-# 7. 데이터 주소 입력
+# 7. 예시 데이터 자동 불러오기 / 다른 데이터 주소 입력
 # ==================================================
 
 st.markdown("### 🔗 지하수 데이터 불러오기")
-st.write("예시 데이터 출처를 확인하거나, 분석하려는 CSV의 직접 다운로드 URL을 입력하세요.")
-
-st.link_button(
-    "💧 예시 데이터 출처 열기 (공공데이터포털)",
-    EXAMPLE_PAGE_URL
+st.write(
+    "예시 데이터 버튼을 누르면 공공데이터포털의 국가지하수관리측정망 자료를 "
+    "불러와 pH 예측을 시작합니다. 다른 CSV 파일은 직접 다운로드 주소를 입력할 수 있습니다."
 )
+st.markdown("**예시 데이터: 한국수자원공사 국가지하수 관리측정망 수질정보**")
+st.caption("예시 자료에는 수소이온농도(pH), 염소이온, 질산성질소 등 수질 항목이 포함되어 있습니다.")
+st.link_button("공공데이터포털 원본 정보 확인", EXAMPLE_PAGE_URL)
 
-st.caption(
-    "예시 출처는 데이터 설명 페이지입니다. 이 링크를 누르면 공공데이터포털로 이동합니다. "
-    "자동 분석하려면 실제 CSV 다운로드 URL을 아래에 입력해야 합니다."
-)
+if st.button("💧 예시 데이터 불러와 바로 pH 예측하기", type="primary", use_container_width=True):
+    try:
+        with st.spinner("공공데이터포털에서 예시 자료를 가져오고 있습니다..."):
+            example_df = load_data(EXAMPLE_PAGE_URL)
+        st.session_state["groundwater_data"] = example_df
+        st.session_state["groundwater_data_url"] = EXAMPLE_PAGE_URL
+        st.session_state["groundwater_data_name"] = "국가지하수관리측정망 예시 데이터"
+        st.session_state["auto_train_example"] = True
+        st.session_state.pop("model_result", None)
+        st.success(f"예시 데이터를 불러왔습니다. {len(example_df):,}개 행, {len(example_df.columns):,}개 열")
+    except Exception as error:
+        st.error("예시 데이터를 자동으로 불러오지 못했습니다.")
+        st.warning(str(error))
 
-with st.form("data_url_form"):
-    data_url = st.text_input(
-        "CSV 데이터 직접 다운로드 URL",
-        placeholder="https://example.com/groundwater.csv"
-    )
-    submitted = st.form_submit_button("📊 데이터 불러오기", use_container_width=True)
+with st.expander("다른 지하수 CSV 데이터 사용하기"):
+    with st.form("data_url_form"):
+        data_url = st.text_input(
+            "CSV 직접 다운로드 URL 또는 공공데이터포털 파일데이터 상세 주소",
+            placeholder="https://example.com/groundwater.csv"
+        )
+        submitted = st.form_submit_button("📊 다른 데이터 불러오기", use_container_width=True)
 
-if submitted:
-    if not data_url.strip():
-        st.error("데이터 주소를 입력해 주세요.")
-    else:
-        try:
-            with st.spinner("데이터를 불러오고 있습니다..."):
-                loaded_df = load_data(data_url)
-            st.session_state["groundwater_data"] = loaded_df
-            st.session_state["groundwater_data_url"] = data_url.strip()
-            st.session_state.pop("model_result", None)
-            st.success(
-                f"데이터를 불러왔습니다. 총 {len(loaded_df):,}개 행, "
-                f"{len(loaded_df.columns):,}개 열입니다."
-            )
-        except Exception as error:
-            st.error("데이터를 불러오지 못했습니다.")
-            st.warning(str(error))
+    if submitted:
+        if not data_url.strip():
+            st.error("데이터 주소를 입력해 주세요.")
+        else:
+            try:
+                with st.spinner("입력한 주소에서 데이터를 불러오고 있습니다..."):
+                    loaded_df = load_data(data_url)
+                st.session_state["groundwater_data"] = loaded_df
+                st.session_state["groundwater_data_url"] = data_url.strip()
+                st.session_state["groundwater_data_name"] = "사용자 지정 데이터"
+                st.session_state["auto_train_example"] = False
+                st.session_state.pop("model_result", None)
+                st.success(f"데이터를 불러왔습니다. 총 {len(loaded_df):,}개 행, {len(loaded_df.columns):,}개 열입니다.")
+            except Exception as error:
+                st.error("데이터를 불러오지 못했습니다.")
+                st.warning(str(error))
 
 if "groundwater_data" not in st.session_state:
-    st.info("CSV 직접 다운로드 URL을 입력한 뒤 '데이터 불러오기'를 눌러 주세요.")
+    st.info("예시 데이터 버튼을 누르거나, 다른 CSV 데이터 주소를 입력해 주세요.")
     st.stop()
 
 df = st.session_state["groundwater_data"]
-st.success(f"현재 분석 데이터: {st.session_state.get('groundwater_data_url', '주소 정보 없음')}")
+st.success(
+    f"현재 분석 데이터: {st.session_state.get('groundwater_data_name', '사용자 데이터')} "
+    f"({len(df):,}개 행)"
+)
 
 
 # ==================================================
@@ -398,6 +468,61 @@ analyte_columns = []
 for name, column in COLUMN_MAP.items():
     if name != "pH" and numeric_data[column].notna().sum() > 0:
         analyte_columns.append(column)
+
+
+# 예시 데이터 버튼을 누른 경우 기본 수질 항목으로 즉시 pH 예측 모델을 학습한다.
+if st.session_state.get("auto_train_example", False):
+    auto_features = [
+        COLUMN_MAP[name]
+        for name in ["염소이온", "질산성질소"]
+        if name in COLUMN_MAP and numeric_data[COLUMN_MAP[name]].notna().sum() > 0
+    ]
+    auto_model_df = numeric_data[auto_features + [ph_column]].dropna(subset=[ph_column]).copy()
+
+    if len(auto_model_df) >= 10 and auto_features:
+        auto_train_idx, auto_test_idx = train_test_split(
+            np.arange(len(auto_model_df)), test_size=0.2, random_state=42
+        )
+        auto_X_train = auto_model_df.iloc[auto_train_idx][auto_features].copy()
+        auto_X_test = auto_model_df.iloc[auto_test_idx][auto_features].copy()
+        auto_y_train = auto_model_df.iloc[auto_train_idx][ph_column]
+        auto_y_test = auto_model_df.iloc[auto_test_idx][ph_column]
+        auto_medians = auto_X_train.median()
+        auto_features = [feature for feature in auto_features if pd.notna(auto_medians[feature])]
+
+        if auto_features:
+            auto_X_train = auto_X_train[auto_features].fillna(auto_medians[auto_features])
+            auto_X_test = auto_X_test[auto_features].fillna(auto_medians[auto_features])
+            auto_model = LinearRegression()
+            auto_model.fit(auto_X_train, auto_y_train)
+            auto_predictions = auto_model.predict(auto_X_test)
+            st.session_state["model_result"] = {
+                "features": auto_features,
+                "model": auto_model,
+                "medians": auto_medians[auto_features],
+                "model_df": auto_model_df,
+                "train_idx": auto_train_idx,
+                "test_idx": auto_test_idx,
+                "y_test": auto_y_test,
+                "predictions": auto_predictions
+            }
+            st.session_state["auto_train_example"] = False
+            st.markdown("### ✨ 예시 데이터 자동 예측 결과")
+            st.caption("기본 독립 변수: " + ", ".join(auto_features))
+            auto_r2 = r2_score(auto_y_test, auto_predictions)
+            auto_mae = mean_absolute_error(auto_y_test, auto_predictions)
+            auto_mse = mean_squared_error(auto_y_test, auto_predictions)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("결정계수 R²", f"{auto_r2:.4f}")
+            m2.metric("평균 절대 오차 MAE", f"{auto_mae:.4f}")
+            m3.metric("평균 제곱 오차 MSE", f"{auto_mse:.4f}")
+            st.success("예시 데이터로 pH 예측 모델 학습과 테스트 예측을 완료했습니다. 아래 탭에서 상세 분석을 확인할 수 있습니다.")
+        else:
+            st.session_state["auto_train_example"] = False
+            st.warning("예시 자료에서 학습 가능한 독립 변수를 찾지 못했습니다.")
+    else:
+        st.session_state["auto_train_example"] = False
+        st.warning("예시 자료의 pH 측정값 또는 입력 변수 자료가 부족해 자동 예측을 수행하지 못했습니다.")
 
 
 def get_missing_count(column):
