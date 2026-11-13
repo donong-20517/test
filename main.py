@@ -26,6 +26,11 @@ st.set_page_config(
 )
 
 EXAMPLE_PAGE_URL = "https://www.data.go.kr/data/15006195/fileData.do"
+# 공공데이터포털 상세 페이지의 '다운로드'가 연결하는 실제 CSV 파일 주소
+EXAMPLE_DOWNLOAD_URL = (
+    "https://www.data.go.kr/cmm/cmm/fileDownload.do"
+    "?atchFileId=FILE_000000003114451&fileDetailSn=1&insertDataPrcus=N"
+)
 
 
 # ==================================================
@@ -382,8 +387,9 @@ def load_data(data_url):
 
 st.markdown("### 🔗 지하수 데이터 불러오기")
 st.write(
-    "예시 데이터 버튼을 누르면 공공데이터포털의 국가지하수관리측정망 자료를 "
-    "불러와 pH 예측을 시작합니다. 다른 CSV 파일은 직접 다운로드 주소를 입력할 수 있습니다."
+    "예시 데이터 버튼을 누르면 실제 CSV 파일을 바로 불러와 pH 예측 결과까지 표시합니다. "
+    "별도로 파일을 다운로드하거나 주소를 복사할 필요가 없습니다. "
+    "다른 자료를 사용하려면 아래에서 CSV 다운로드 주소를 입력하세요."
 )
 st.markdown("**예시 데이터: 한국수자원공사 국가지하수 관리측정망 수질정보**")
 st.caption("예시 자료에는 수소이온농도(pH), 염소이온, 질산성질소 등 수질 항목이 포함되어 있습니다.")
@@ -391,17 +397,18 @@ st.link_button("공공데이터포털 원본 정보 확인", EXAMPLE_PAGE_URL)
 
 if st.button("💧 예시 데이터 불러와 바로 pH 예측하기", type="primary", use_container_width=True):
     try:
-        with st.spinner("공공데이터포털에서 예시 자료를 가져오고 있습니다..."):
-            example_df = load_data(EXAMPLE_PAGE_URL)
+        with st.spinner("공공데이터포털의 실제 CSV 파일을 불러와 pH 예측 모델을 학습하고 있습니다..."):
+            example_df = load_data(EXAMPLE_DOWNLOAD_URL)
         st.session_state["groundwater_data"] = example_df
-        st.session_state["groundwater_data_url"] = EXAMPLE_PAGE_URL
+        st.session_state["groundwater_data_url"] = EXAMPLE_DOWNLOAD_URL
         st.session_state["groundwater_data_name"] = "국가지하수관리측정망 예시 데이터"
         st.session_state["auto_train_example"] = True
         st.session_state.pop("model_result", None)
         st.success(f"예시 데이터를 불러왔습니다. {len(example_df):,}개 행, {len(example_df.columns):,}개 열")
     except Exception as error:
-        st.error("예시 데이터를 자동으로 불러오지 못했습니다.")
+        st.error("예시 CSV 파일을 불러오지 못했습니다.")
         st.warning(str(error))
+        st.caption("원본 데이터 페이지: https://www.data.go.kr/data/15006195/fileData.do")
 
 with st.expander("다른 지하수 CSV 데이터 사용하기"):
     with st.form("data_url_form"):
